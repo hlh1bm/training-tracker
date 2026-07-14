@@ -13,6 +13,12 @@ st.set_page_config(
 )
 
 # ============================================================
+# DATA FILE PATH - YOUR NETWORK DRIVE
+# ============================================================
+# IMPORTANT: Update this to your actual network path!
+DATA_FILE = r"\\thnas01\THNAS02\制造部MFG\02.工程Engineer\OB\Maintenance\Training_Tracker\data.json"
+
+# ============================================================
 # LANGUAGE
 # ============================================================
 LANG = {
@@ -65,6 +71,9 @@ LANG = {
         "sessions_completed": "Sessions",
         "new_name": "New Name",
         "confirm_delete": "Delete?",
+        "data_location": "📁 Data Location",
+        "loading": "Loading data...",
+        "error_loading": "Error loading data",
     },
     "th": {
         "title": "📋 ระบบติดตามการฝึกอบรม",
@@ -115,6 +124,9 @@ LANG = {
         "sessions_completed": "จำนวนครั้ง",
         "new_name": "ชื่อใหม่",
         "confirm_delete": "ลบ?",
+        "data_location": "📁 ตำแหน่งข้อมูล",
+        "loading": "กำลังโหลดข้อมูล...",
+        "error_loading": "โหลดข้อมูลผิดพลาด",
     },
     "zh": {
         "title": "📋 培训追踪系统",
@@ -165,6 +177,9 @@ LANG = {
         "sessions_completed": "次数",
         "new_name": "新名称",
         "confirm_delete": "删除?",
+        "data_location": "📁 数据位置",
+        "loading": "加载数据中...",
+        "error_loading": "加载数据错误",
     }
 }
 
@@ -194,6 +209,8 @@ def get_theme_css():
             .stButton > button { background: white !important; border: 1px solid #d0d7de !important; color: #1a2a6c !important; }
             h1, h2, h3 { color: #1a2a6c !important; }
             .emp-name { color: #1a2a6c !important; }
+            .data-location { background: #e8f5e9 !important; padding: 4px 12px !important; border-radius: 8px !important; font-size: 11px !important; color: #2e7d32 !important; border: 1px solid #a5d6a7 !important; }
+            .sync-status { color: #2e7d32 !important; }
         </style>
         """
     else:
@@ -211,28 +228,44 @@ def get_theme_css():
             .stTextInput > div > input { background: #1a2744 !important; color: #e0e0e0 !important; border: 1px solid #2d3a5e !important; }
             .stNumberInput > div > input { background: #1a2744 !important; color: #e0e0e0 !important; border: 1px solid #2d3a5e !important; }
             .stSelectbox > div > div { background: #1a2744 !important; color: #e0e0e0 !important; }
+            .data-location { background: #1a2744 !important; padding: 4px 12px !important; border-radius: 8px !important; font-size: 11px !important; color: #81c784 !important; border: 1px solid #2d3a5e !important; }
+            .sync-status { color: #81c784 !important; }
         </style>
         """
 
 # ============================================================
-# DATA FILE
+# DATA FUNCTIONS - READ/WRITE TO NETWORK DRIVE
 # ============================================================
-DATA_FILE = "data/training_data.json"
-
 def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r') as f:
+    """Load data from shared network drive"""
+    try:
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             return data.get("machines", {}), data.get("employees", [])
-        except:
-            pass
-    return {}, []
+        else:
+            st.warning(f"⚠️ Data file not found at: {DATA_FILE}")
+            return {}, []
+    except Exception as e:
+        st.error(f"❌ Error loading data: {e}")
+        return {}, []
 
 def save_data():
-    os.makedirs("data", exist_ok=True)
-    with open(DATA_FILE, 'w') as f:
-        json.dump({"machines": st.session_state.machines, "employees": st.session_state.employees}, f, indent=2)
+    """Save data to shared network drive"""
+    try:
+        # Create directory if it doesn't exist
+        dir_path = os.path.dirname(DATA_FILE)
+        if dir_path and not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
+        
+        # Save to network drive
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump({"machines": st.session_state.machines, "employees": st.session_state.employees}, f, indent=2, ensure_ascii=False)
+        
+        return True
+    except Exception as e:
+        st.error(f"❌ Error saving data: {e}")
+        return False
 
 # ============================================================
 # STATUS HELPERS
@@ -288,10 +321,11 @@ def get_overall_status(emp):
 # LOAD DATA
 # ============================================================
 if 'data_loaded' not in st.session_state:
-    machines, employees = load_data()
-    st.session_state.machines = machines
-    st.session_state.employees = employees
-    st.session_state.data_loaded = True
+    with st.spinner("Loading data from network drive..."):
+        machines, employees = load_data()
+        st.session_state.machines = machines
+        st.session_state.employees = employees
+        st.session_state.data_loaded = True
 
 # ============================================================
 # CSS
@@ -386,12 +420,18 @@ st.markdown("""
 # ============================================================
 L = LANG[st.session_state.lang]
 
-col1, col2, col3, col4 = st.columns([2, 0.8, 0.6, 0.6])
+col1, col2, col3, col4, col5 = st.columns([1.8, 0.5, 0.5, 0.4, 0.4])
 with col1:
     st.title(L["title"])
 with col2:
-    st.markdown(f'<span style="font-size:12px;color:#28a745;">💾 {L["auto_saved"]}</span>', unsafe_allow_html=True)
+    st.markdown(f'<span class="data-location">📁 Shared Drive</span>', unsafe_allow_html=True)
 with col3:
+    # Show if file exists
+    if os.path.exists(DATA_FILE):
+        st.markdown('<span class="sync-status">✅ Connected</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="sync-status" style="color:#f44336;">❌ Not Found</span>', unsafe_allow_html=True)
+with col4:
     lang_options = {"🇬🇧 EN": "en", "🇹🇭 TH": "th", "🇨🇳 中文": "zh"}
     new_lang = st.selectbox("", list(lang_options.keys()), 
                            index=list(lang_options.values()).index(st.session_state.lang), 
@@ -399,7 +439,7 @@ with col3:
     if new_lang and lang_options[new_lang] != st.session_state.lang:
         st.session_state.lang = lang_options[new_lang]
         st.rerun()
-with col4:
+with col5:
     theme_options = ["☀️", "🌙"]
     current_theme = 0 if st.session_state.theme == "light" else 1
     new_theme = st.selectbox("", theme_options, index=current_theme, label_visibility="collapsed")
@@ -463,30 +503,21 @@ with tab1:
         if st.button(L["add_employee"], use_container_width=True):
             st.session_state.show_add_emp = True
     with col2:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            machines, employees = load_data()
+            st.session_state.machines = machines
+            st.session_state.employees = employees
+            st.rerun()
+    with col3:
         if st.button(L["export"], use_container_width=True):
             data = {"machines": st.session_state.machines, "employees": st.session_state.employees}
-            json_str = json.dumps(data, indent=2)
+            json_str = json.dumps(data, indent=2, ensure_ascii=False)
             st.download_button(
                 label="📥 Download",
                 data=json_str,
                 file_name=f"training_data_{datetime.now().strftime('%Y%m%d')}.json",
                 mime="application/json"
             )
-    with col3:
-        uploaded_file = st.file_uploader(L["import"], type=["json"], label_visibility="collapsed")
-        if uploaded_file:
-            try:
-                data = json.load(uploaded_file)
-                if "machines" in data and "employees" in data:
-                    st.session_state.machines = data["machines"]
-                    st.session_state.employees = data["employees"]
-                    save_data()
-                    st.success("✅ Imported!")
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid file!")
-            except:
-                st.error("❌ Error reading file!")
     
     # --- ADD EMPLOYEE ---
     if st.session_state.get("show_add_emp", False):
@@ -508,8 +539,8 @@ with tab1:
                                 "emp_name": new_name,
                                 "training": []
                             })
-                            save_data()
-                            st.success("✅ Employee added!")
+                            if save_data():
+                                st.success("✅ Employee added and saved to network drive!")
                             st.session_state.show_add_emp = False
                             st.rerun()
                     else:
@@ -543,7 +574,7 @@ with tab1:
     
     # --- DISPLAY EMPLOYEES ---
     if not employees_to_show:
-        st.info(f"No {L['employees_count']} found. Click 'Add Employee' to add one!")
+        st.info(f"No {L['employees_count']} found.")
     
     for emp in employees_to_show:
         status, label, passed, total = get_overall_status(emp)
@@ -692,7 +723,7 @@ with tab2:
                 st.warning("⚠️ Name already exists or empty")
     
     if not st.session_state.machines:
-        st.info(f"No {L['machines_count']} found. Click 'Add Machine' to add one!")
+        st.info(f"No {L['machines_count']} found.")
     
     for name, cfg in st.session_state.machines.items():
         color_map = {"red": "#e74c3c", "amber": "#f39c12", "green": "#2ecc71"}
@@ -759,4 +790,4 @@ with tab2:
 # FOOTER
 # ============================================================
 st.divider()
-st.caption(f"📊 {len(st.session_state.employees)} {L['employees_count']} · {len(st.session_state.machines)} {L['machines_count']} · {L['auto_saved']}")
+st.caption(f"📊 {len(st.session_state.employees)} {L['employees_count']} · {len(st.session_state.machines)} {L['machines_count']} · 💾 Data saved to shared drive: {DATA_FILE}")
